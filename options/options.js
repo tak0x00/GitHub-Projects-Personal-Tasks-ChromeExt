@@ -20,13 +20,21 @@
       return;
     }
 
-    // Single-account mode: Active if any tasks.google.com tab is open
-    const openTabs = await chrome.tabs.query({ url: "https://tasks.google.com/*" });
-    const hasActiveTab = openTabs.length > 0;
+    // Active = account whose tabId matches the FIRST tab in the GP Tasks group.
+    // Only the first tab counts — this enforces single-account-active policy.
+    let activeTabId = null;
+    const groups = await chrome.tabGroups.query({ title: "GP Tasks" });
+    if (groups.length > 0) {
+      const groupTabs = await chrome.tabs.query({
+        groupId: groups[0].id,
+        url: "https://tasks.google.com/*",
+      });
+      activeTabId = groupTabs[0]?.id ?? null;
+    }
 
     accountList.innerHTML = "";
     for (const account of accounts) {
-      const isActive = hasActiveTab;
+      const isActive = activeTabId != null && account.tabId === activeTabId;
       const card = document.createElement("div");
       card.className = "account-card";
 

@@ -481,13 +481,22 @@
     const empty = overlay.querySelector(".gp-import-empty");
     const actions = overlay.querySelector(".gp-modal-actions");
 
-    // Get cached data
-    let response;
+    // Get cached data and the currently active account
+    let cacheResponse, activeResponse;
     try {
-      response = await chrome.runtime.sendMessage({ type: "GET_CACHED_TASKS" });
+      [cacheResponse, activeResponse] = await Promise.all([
+        chrome.runtime.sendMessage({ type: "GET_CACHED_TASKS" }),
+        chrome.runtime.sendMessage({ type: "GET_ACTIVE_ACCOUNT" }),
+      ]);
     } catch { /* context invalidated */ }
-    const cache = response?.cache ?? {};
-    const accounts = Object.values(cache);
+    const cache = cacheResponse?.cache ?? {};
+    const activeEmail = activeResponse?.email;
+
+    // Use the active account first; fall back to first cached account
+    const allAccounts = Object.values(cache);
+    const accounts = activeEmail && cache[activeEmail]
+      ? [cache[activeEmail]]
+      : allAccounts.slice(0, 1);
 
     // Get existing imported task IDs for this project
     const existingTasks = await getTasks(projectUrl);

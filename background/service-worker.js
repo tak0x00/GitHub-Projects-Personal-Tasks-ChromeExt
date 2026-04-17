@@ -84,8 +84,27 @@
         return true;
 
       case "SYNC_COMPLETE":
-        sendResponse({ success: true });
-        return false;
+        // Store the tab ID so options page can determine which account is active.
+        (async () => {
+          if (message.email && sender.tab?.id) {
+            try {
+              const r = await chrome.storage.local.get("gp_gcal_cache");
+              const cache = r["gp_gcal_cache"] ?? {};
+              if (cache[message.email]) {
+                cache[message.email].tabId = sender.tab.id;
+                await chrome.storage.local.set({ "gp_gcal_cache": cache });
+              }
+            } catch {}
+          }
+          sendResponse({ success: true });
+        })();
+        return true;
+
+      case "GET_ACTIVE_ACCOUNT":
+        getActiveAccount()
+          .then((email) => sendResponse({ success: true, email }))
+          .catch(() => sendResponse({ success: true, email: null }));
+        return true;
 
       case "WRITEBACK_DONE":
       case "WRITEBACK_UNDONE":
@@ -128,6 +147,27 @@
       };
       chrome.storage.onChanged.addListener(listener);
     });
+  }
+
+  /**
+   * Returns the email of the account whose tab is first in the GP Tasks group.
+   * Only the first tab in the group is considered "active" (single-account policy).
+   */
+  async function getActiveAccount() {
+    const groups = await chrome.tabGroups.query({ title: TAB_GROUP_TITLE });
+    if (groups.length === 0) return null;
+
+    const tabs = await chrome.tabs.query({
+      groupId: groups[0].id,
+      url: "https://tasks.google.com/*",
+    });
+    if (tabs.length === 0) return null;
+
+    const firstTabId = tabs[0].id;
+    const result = await chrome.storage.local.get("gp_gcal_cache");
+    const cache = result["gp_gcal_cache"] ?? {};
+    const match = Object.values(cache).find((a) => a.tabId === firstTabId);
+    return match?.email ?? null;
   }
 
   async function handleWriteback(message) {

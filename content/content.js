@@ -9,6 +9,7 @@
   const CARD_CLASS = "gp-personal-task-card";
   const ADD_BTN_CLASS = "gp-personal-task-add-btn";
   const MODAL_CLASS = "gp-personal-task-modal";
+  const TOGGLE_CLASS = "gp-personal-task-toggle";
   const DEFAULT_COLORS = ["#8b5cf6", "#f59e0b", "#10b981", "#ef4444", "#3b82f6", "#ec4899"];
   const DEFAULT_COLOR = DEFAULT_COLORS[0];
 
@@ -28,7 +29,7 @@
     return all.filter((t) => t.projectUrl === projectUrl);
   }
 
-  async function addTask(title, status, projectUrl, description = "", color = DEFAULT_COLOR) {
+  async function addTask(title, status, projectUrl, description = "", color = DEFAULT_COLOR, gcalSource = null) {
     const task = {
       id: crypto.randomUUID(),
       title,
@@ -38,6 +39,7 @@
       color,
       createdAt: Date.now(),
       updatedAt: Date.now(),
+      gcalSource,
     };
     const all = await loadAll();
     all.push(task);
@@ -60,6 +62,16 @@
     if (filtered.length === all.length) return false;
     await saveAll(filtered);
     return true;
+  }
+
+  // ── Context Guard ────────────────────────────────────────
+
+  function isContextValid() {
+    try {
+      return !!chrome.runtime?.id;
+    } catch {
+      return false;
+    }
   }
 
   // ── GitHub DOM Helpers ───────────────────────────────────
@@ -149,6 +161,57 @@
     return columnEl;
   }
 
+  // ── Toggle Button ────────────────────────────────────────
+
+  async function injectToggleButton() {
+    if (!isContextValid()) return;
+    if (document.querySelector(`.${TOGGLE_CLASS}`)) return;
+
+    // Insert near the board header area
+    const headerBar =
+      document.querySelector('[data-testid="board-view-filter-bar"]') ??
+      document.querySelector(".Board-module__boardHeaderContainer") ??
+      document.querySelector('[data-hpc] > div > div');
+
+    const anchor = headerBar ?? document.querySelector('[data-board-column]')?.parentElement;
+    if (!anchor) return;
+
+    let visible = true;
+    try {
+      const result = await chrome.storage.sync.get("gp_visible");
+      visible = result.gp_visible !== false;
+    } catch {
+      return; // context invalidated during await
+    }
+
+    const btn = document.createElement("button");
+    btn.className = TOGGLE_CLASS;
+    btn.title = visible ? "Hide personal tasks" : "Show personal tasks";
+    btn.innerHTML = `<span class="gp-toggle-icon">👤</span><span class="gp-toggle-label">${visible ? "Personal: ON" : "Personal: OFF"}</span>`;
+    btn.classList.toggle("gp-toggle-off", !visible);
+
+    btn.addEventListener("click", async () => {
+      if (!isContextValid()) return;
+      try {
+        const { gp_visible: current } = await chrome.storage.sync.get("gp_visible");
+        const next = current === false;
+        await chrome.storage.sync.set({ gp_visible: next });
+        btn.title = next ? "Hide personal tasks" : "Show personal tasks";
+        btn.querySelector(".gp-toggle-label").textContent = next ? "Personal: ON" : "Personal: OFF";
+        btn.classList.toggle("gp-toggle-off", !next);
+        injectCards();
+      } catch { /* context invalidated */ }
+    });
+
+    isSelfMutation = true;
+    if (headerBar) {
+      headerBar.appendChild(btn);
+    } else {
+      anchor.insertBefore(btn, anchor.firstChild);
+    }
+    isSelfMutation = false;
+  }
+
   // ── Card Injection ───────────────────────────────────────
 
   function clearInjectedCards() {
@@ -159,7 +222,7 @@
 
   async function injectCards() {
     // Prevent concurrent runs — if already injecting, skip
-    if (injectLock) return;
+    if (injectLock || !isContextValid()) return;
     injectLock = true;
     isSelfMutation = true;
 
@@ -200,11 +263,16 @@
     card.className = CARD_CLASS;
     card.dataset.taskId = task.id;
     card.draggable = true;
-    card.style.borderLeftColor = task.color;
+
+    const isGcal = !!task.gcalSource;
+    card.style.borderLeftColor = isGcal ? "#4285f4" : task.color;
+
+    const badgeClass = isGcal ? "gp-task-badge gp-task-badge-gcal" : "gp-task-badge";
+    const badgeText = isGcal ? "Google Tasks" : "Personal";
 
     card.innerHTML = `
       <div class="gp-task-header">
-        <span class="gp-task-badge">Personal</span>
+        <span class="${badgeClass}">${badgeText}</span>
         <button class="gp-task-delete" title="Delete task">&times;</button>
       </div>
       <div class="gp-task-title">${escapeHtml(task.title)}</div>
@@ -240,11 +308,47 @@
   }
 
   function createAddButton(columnName, projectUrl) {
+    const wrapper = document.createElement("div");
+    wrapper.className = ADD_BTN_CLASS;
+
     const btn = document.createElement("button");
-    btn.className = ADD_BTN_CLASS;
+    btn.className = "gp-add-btn-main";
     btn.textContent = "+ Add personal task";
-    btn.addEventListener("click", () => openAddModal(columnName, projectUrl));
-    return btn;
+
+    const menu = document.createElement("div");
+    menu.className = "gp-add-menu";
+    menu.style.display = "none";
+    menu.innerHTML = `
+      <button class="gp-add-menu-item" data-action="create">Create new</button>
+      <button class="gp-add-menu-item gp-add-menu-import" data-action="import">Import from Google Tasks</button>
+    `;
+
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const isVisible = menu.style.display !== "none";
+      // Close all other menus first
+      document.querySelectorAll(".gp-add-menu").forEach((m) => (m.style.display = "none"));
+      menu.style.display = isVisible ? "none" : "block";
+    });
+
+    menu.querySelector('[data-action="create"]').addEventListener("click", (e) => {
+      e.stopPropagation();
+      menu.style.display = "none";
+      openAddModal(columnName, projectUrl);
+    });
+
+    menu.querySelector('[data-action="import"]').addEventListener("click", (e) => {
+      e.stopPropagation();
+      menu.style.display = "none";
+      openImportModal(columnName, projectUrl);
+    });
+
+    // Close menu on outside click
+    document.addEventListener("click", () => { menu.style.display = "none"; });
+
+    wrapper.appendChild(btn);
+    wrapper.appendChild(menu);
+    return wrapper;
   }
 
   // ── Drop Zones ───────────────────────────────────────────
@@ -271,8 +375,17 @@
         cardList.classList.remove("gp-drop-target");
         const taskId = e.dataTransfer.getData("text/plain");
         if (taskId) {
-          await updateTask(taskId, { status: col.name });
+          const updated = await updateTask(taskId, { status: col.name });
           injectCards();
+
+          // Writeback for Google Tasks imported cards
+          if (updated?.gcalSource && isContextValid()) {
+            const isDone = col.name.toLowerCase() === "done";
+            chrome.runtime.sendMessage({
+              type: isDone ? "WRITEBACK_DONE" : "WRITEBACK_UNDONE",
+              gcalSource: updated.gcalSource,
+            }).catch(() => {});
+          }
         }
       });
     }
@@ -303,6 +416,190 @@
       },
     });
   }
+
+  // ── Import Modal ──────────────────────────────────────────
+
+  async function openImportModal(status, projectUrl) {
+    document.querySelector(`.${MODAL_CLASS}`)?.remove();
+
+    const overlay = document.createElement("div");
+    overlay.className = MODAL_CLASS;
+
+    overlay.innerHTML = `
+      <div class="gp-modal-content gp-import-modal">
+        <h3>Import from Google Tasks</h3>
+        <div class="gp-import-loading">Loading tasks...</div>
+        <div class="gp-import-body" style="display:none">
+          <div class="gp-import-account-select"></div>
+          <div class="gp-import-task-list"></div>
+        </div>
+        <div class="gp-import-empty" style="display:none">
+          <p>No Google Tasks found.</p>
+          <p class="gp-import-help">Open <strong>tasks.google.com</strong> to sync your tasks, or click "Sync Now" below.</p>
+          <button class="gp-import-sync-btn">Sync Now</button>
+        </div>
+        <div class="gp-modal-actions" style="display:none">
+          <button class="gp-import-refresh-btn" title="Reload tasks from Google Tasks">Reload</button>
+          <span style="flex:1"></span>
+          <button class="gp-modal-cancel">Cancel</button>
+          <button class="gp-modal-save gp-import-btn" disabled>Import Selected</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    overlay.querySelector(".gp-modal-cancel")?.addEventListener("click", () => overlay.remove());
+    overlay.addEventListener("click", (e) => {
+      if (e.target === overlay) overlay.remove();
+    });
+
+    // Shared sync-and-reload handler
+    async function syncAndReload() {
+      overlay.querySelector(".gp-import-empty").style.display = "none";
+      overlay.querySelector(".gp-import-body").style.display = "none";
+      overlay.querySelector(".gp-import-loading").style.display = "block";
+      try {
+        await chrome.runtime.sendMessage({ type: "SYNC_TASKS" });
+      } catch { /* context invalidated */ }
+      await populateImportModal(overlay, status, projectUrl);
+    }
+
+    // Sync button for empty state
+    overlay.querySelector(".gp-import-sync-btn")?.addEventListener("click", syncAndReload);
+
+    // Reload button in action bar
+    overlay.querySelector(".gp-import-refresh-btn")?.addEventListener("click", syncAndReload);
+
+    // Load cached tasks
+    await populateImportModal(overlay, status, projectUrl);
+  }
+
+  async function populateImportModal(overlay, status, projectUrl) {
+    const loading = overlay.querySelector(".gp-import-loading");
+    const body = overlay.querySelector(".gp-import-body");
+    const empty = overlay.querySelector(".gp-import-empty");
+    const actions = overlay.querySelector(".gp-modal-actions");
+
+    // Get cached data and the currently active account
+    let cacheResponse, activeResponse;
+    try {
+      [cacheResponse, activeResponse] = await Promise.all([
+        chrome.runtime.sendMessage({ type: "GET_CACHED_TASKS" }),
+        chrome.runtime.sendMessage({ type: "GET_ACTIVE_ACCOUNT" }),
+      ]);
+    } catch { /* context invalidated */ }
+    const cache = cacheResponse?.cache ?? {};
+    const activeEmail = activeResponse?.email;
+
+    // Use the active account first; fall back to first cached account
+    const allAccounts = Object.values(cache);
+    const accounts = activeEmail && cache[activeEmail]
+      ? [cache[activeEmail]]
+      : allAccounts.slice(0, 1);
+
+    // Get existing imported task IDs for this project
+    const existingTasks = await getTasks(projectUrl);
+    const importedIds = new Set(
+      existingTasks
+        .filter((t) => t.gcalSource)
+        .map((t) => t.gcalSource.taskId)
+    );
+
+    loading.style.display = "none";
+
+    if (accounts.length === 0 || accounts.every((a) => a.taskLists.length === 0)) {
+      empty.style.display = "block";
+      return;
+    }
+
+    body.style.display = "block";
+    actions.style.display = "flex";
+
+    const accountSelect = overlay.querySelector(".gp-import-account-select");
+    accountSelect.innerHTML = `<div class="gp-import-account-label">${escapeHtml(accounts[0].email)}</div>`;
+
+    renderTaskList(overlay, accounts, importedIds, projectUrl);
+
+    // Import button handler
+    const importBtn = overlay.querySelector(".gp-import-btn");
+    importBtn.addEventListener("click", async () => {
+      const checked = overlay.querySelectorAll('.gp-import-checkbox:checked');
+      if (checked.length === 0) return;
+
+      const selectedEmail = accounts[0].email;
+
+      for (const cb of checked) {
+        const taskData = JSON.parse(cb.dataset.task);
+        await addTask(
+          taskData.title,
+          status,
+          projectUrl,
+          taskData.notes ?? "",
+          "#4285f4", // Google blue
+          {
+            email: selectedEmail,
+            taskListTitle: cb.dataset.listTitle,
+            taskId: taskData.id,
+            importedProjectUrl: projectUrl,
+          }
+        );
+      }
+
+      overlay.remove();
+      injectCards();
+    });
+  }
+
+  function renderTaskList(overlay, accounts, importedIds, projectUrl) {
+    const account = accounts[0];
+    if (!account) return;
+
+    const listContainer = overlay.querySelector(".gp-import-task-list");
+    const importBtn = overlay.querySelector(".gp-import-btn");
+
+    let html = "";
+    for (const taskList of account.taskLists) {
+      const incompleteTasks = taskList.tasks.filter((t) => !t.completed);
+      if (incompleteTasks.length === 0) continue;
+
+      html += `<div class="gp-import-list-group">
+        <div class="gp-import-list-title">${escapeHtml(taskList.title)}</div>`;
+
+      for (const task of incompleteTasks) {
+        const alreadyImported = importedIds.has(task.id);
+        const disabled = alreadyImported ? "disabled" : "";
+        const label = alreadyImported ? " (already imported)" : "";
+
+        html += `
+          <label class="gp-import-task-row ${alreadyImported ? "gp-import-disabled" : ""}">
+            <input type="checkbox" class="gp-import-checkbox" ${disabled}
+              data-task='${escapeAttr(JSON.stringify(task))}'
+              data-list-title="${escapeAttr(taskList.title)}">
+            <span class="gp-import-task-title">${escapeHtml(task.title)}${label}</span>
+            ${task.due ? `<span class="gp-import-task-due">${escapeHtml(task.due)}</span>` : ""}
+          </label>`;
+      }
+
+      html += "</div>";
+    }
+
+    if (!html) {
+      html = '<div class="gp-import-no-tasks">No incomplete tasks found.</div>';
+    }
+
+    listContainer.innerHTML = html;
+
+    // Update import button state on checkbox change
+    listContainer.querySelectorAll(".gp-import-checkbox").forEach((cb) => {
+      cb.addEventListener("change", () => {
+        const anyChecked = listContainer.querySelector(".gp-import-checkbox:checked");
+        importBtn.disabled = !anyChecked;
+      });
+    });
+  }
+
+  // ── Task Modal (Create/Edit) ─────────────────────────────
 
   function openTaskModal(opts) {
     document.querySelector(`.${MODAL_CLASS}`)?.remove();
@@ -407,6 +704,7 @@
     initialized = true;
 
     setTimeout(() => {
+      injectToggleButton();
       injectCards();
       setupDropZones();
     }, 500);
@@ -417,7 +715,7 @@
     const target = mutation.target;
     if (!target || !target.closest) return false;
     // Ignore changes inside our own injected elements
-    if (target.closest(`.${CARD_CLASS}`) || target.closest(`.${ADD_BTN_CLASS}`) || target.closest(`.${MODAL_CLASS}`)) return true;
+    if (target.closest(`.${CARD_CLASS}`) || target.closest(`.${ADD_BTN_CLASS}`) || target.closest(`.${MODAL_CLASS}`) || target.closest(`.${TOGGLE_CLASS}`)) return true;
     // Ignore changes inside existing GitHub board cards (tooltips, hover effects, etc.)
     if (target.closest('[data-board-column]') && !target.hasAttribute('data-board-column')) return true;
     return false;
@@ -425,7 +723,7 @@
 
   // MutationObserver for SPA navigation
   const observer = new MutationObserver((mutations) => {
-    if (isSelfMutation || isDragging) return;
+    if (isSelfMutation || isDragging || !isContextValid()) return;
 
     const relevant = mutations.some(
       (m) => m.type === "childList" &&

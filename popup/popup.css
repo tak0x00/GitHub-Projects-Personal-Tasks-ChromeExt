@@ -153,11 +153,69 @@ header h1 {
   background: rgba(248, 81, 73, 0.1);
 }
 
+/* Google Tasks Sync */
+.gcal-section {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #21262d;
+}
+
+.sync-btn {
+  padding: 5px 12px;
+  background: #21262d;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  color: #8ab4f8;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.sync-btn:hover {
+  background: #30363d;
+}
+
+.sync-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.sync-status-text {
+  font-size: 11px;
+  color: #8b949e;
+}
+
+/* Task Item Badge */
+.task-item-badge {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 600;
+  padding: 1px 4px;
+  border-radius: 3px;
+  margin-right: 4px;
+  vertical-align: middle;
+  text-transform: uppercase;
+}
+
+.task-item-badge-gcal {
+  background: rgba(66, 133, 244, 0.2);
+  color: #8ab4f8;
+}
+
 /* Footer */
 footer {
   margin-top: 12px;
   padding-top: 12px;
   border-top: 1px solid #21262d;
+}
+
+.footer-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .toggle-label {
@@ -171,4 +229,14 @@ footer {
 
 .toggle-label input[type="checkbox"] {
   accent-color: #8b5cf6;
+}
+
+.settings-link {
+  font-size: 12px;
+  color: #8b949e;
+  text-decoration: none;
+}
+
+.settings-link:hover {
+  color: #e6edf3;
 }

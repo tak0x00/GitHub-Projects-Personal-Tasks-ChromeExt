@@ -47,6 +47,9 @@
   const quickTitle = document.getElementById("quickTitle");
   const quickStatus = document.getElementById("quickStatus");
   const toggleVisibility = document.getElementById("toggleVisibility");
+  const syncBtn = document.getElementById("syncBtn");
+  const syncStatus = document.getElementById("syncStatus");
+  const openSettings = document.getElementById("openSettings");
 
   // ── Render ───────────────────────────────────────────────
 
@@ -75,9 +78,13 @@
       for (const task of statusTasks) {
         const item = document.createElement("div");
         item.className = "task-item";
-        item.style.borderLeftColor = task.color;
+        const isGcal = !!task.gcalSource;
+        item.style.borderLeftColor = isGcal ? "#4285f4" : (task.color || "#8b5cf6");
+        const badge = isGcal
+          ? '<span class="task-item-badge task-item-badge-gcal">GCal</span>'
+          : '';
         item.innerHTML = `
-          <div class="task-item-title">${escapeHtml(task.title)}</div>
+          <div class="task-item-title">${badge}${escapeHtml(task.title)}</div>
           <div class="task-item-project">${escapeHtml(task.projectUrl)}</div>
           <button class="task-item-delete" data-id="${task.id}" title="Delete">&times;</button>
         `;
@@ -120,6 +127,28 @@
 
   chrome.storage.sync.get("gp_visible", (result) => {
     toggleVisibility.checked = result.gp_visible !== false;
+  });
+
+  // ── Sync Google Tasks ─────────────────────────────────────
+
+  syncBtn.addEventListener("click", async () => {
+    syncBtn.disabled = true;
+    syncStatus.textContent = "Syncing...";
+    try {
+      const response = await chrome.runtime.sendMessage({ type: "SYNC_TASKS" });
+      syncStatus.textContent = response?.success ? "Synced!" : "Failed";
+    } catch {
+      syncStatus.textContent = "Error";
+    }
+    syncBtn.disabled = false;
+    setTimeout(() => { syncStatus.textContent = ""; }, 3000);
+  });
+
+  // ── Settings Link ───────────────────────────────────────
+
+  openSettings.addEventListener("click", (e) => {
+    e.preventDefault();
+    chrome.runtime.openOptionsPage();
   });
 
   // ── Init ─────────────────────────────────────────────────

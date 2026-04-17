@@ -1,9 +1,12 @@
 {
   "manifest_version": 3,
   "name": "GitHub Projects Personal Tasks",
-  "version": "1.0.0",
-  "description": "Add personal task cards to GitHub Projects kanban boards",
-  "permissions": ["storage"],
+  "version": "1.1.0",
+  "description": "Add personal task cards to GitHub Projects kanban boards with Google Tasks import",
+  "permissions": ["storage", "tabs", "tabGroups"],
+  "background": {
+    "service_worker": "background/service-worker.js"
+  },
   "action": {
     "default_popup": "popup/index.html",
     "default_icon": {
@@ -12,11 +15,17 @@
       "128": "icons/icon-128.png"
     }
   },
+  "options_page": "options/options.html",
   "content_scripts": [
     {
       "matches": ["https://github.com/*"],
       "js": ["content/content.js"],
       "css": ["content/styles.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://tasks.google.com/*"],
+      "js": ["tasks-scraper/scraper.js"],
       "run_at": "document_idle"
     }
   ],

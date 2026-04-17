@@ -38,11 +38,15 @@
   }
 
   async function ensureTabInGroup(tab) {
+    // Chrome throws if you try to collapse a group containing the active tab
+    const shouldCollapse = !tab.active;
     try {
       const existingGroup = await findOrCreateTabGroup(tab.windowId);
 
       if (existingGroup && tab.groupId === existingGroup.id) {
-        await chrome.tabGroups.update(existingGroup.id, { collapsed: true });
+        if (shouldCollapse) {
+          await chrome.tabGroups.update(existingGroup.id, { collapsed: true });
+        }
         return;
       }
 
@@ -54,7 +58,7 @@
       await chrome.tabGroups.update(groupId, {
         title: TAB_GROUP_TITLE,
         color: TAB_GROUP_COLOR,
-        collapsed: true,
+        collapsed: shouldCollapse,
       });
     } catch (e) {
       console.warn("[GP Tasks] Failed to manage tab group:", e);

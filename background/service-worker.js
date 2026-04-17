@@ -48,10 +48,25 @@
   /**
    * Open a new tasks.google.com tab for adding an account.
    * Always creates a fresh tab so the user can log into a different account.
+   * Keeps the group expanded so the new tab is visible.
    */
   async function openNewTasksTab() {
     const tab = await chrome.tabs.create({ url: TASKS_URL, active: true });
-    await ensureTabInGroup(tab);
+    try {
+      const existingGroup = await findOrCreateTabGroup(tab.windowId);
+      const groupId = await chrome.tabs.group({
+        tabIds: [tab.id],
+        ...(existingGroup ? { groupId: existingGroup.id } : {}),
+      });
+      // Keep expanded so the user can see and interact with the new tab
+      await chrome.tabGroups.update(groupId, {
+        title: TAB_GROUP_TITLE,
+        color: TAB_GROUP_COLOR,
+        collapsed: false,
+      });
+    } catch (e) {
+      console.warn("[GP Tasks] Failed to manage tab group:", e);
+    }
     return tab;
   }
 

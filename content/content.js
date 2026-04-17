@@ -9,6 +9,7 @@
   const CARD_CLASS = "gp-personal-task-card";
   const ADD_BTN_CLASS = "gp-personal-task-add-btn";
   const MODAL_CLASS = "gp-personal-task-modal";
+  const TOGGLE_CLASS = "gp-personal-task-toggle";
   const DEFAULT_COLORS = ["#8b5cf6", "#f59e0b", "#10b981", "#ef4444", "#3b82f6", "#ec4899"];
   const DEFAULT_COLOR = DEFAULT_COLORS[0];
 
@@ -147,6 +148,48 @@
       if (list) return list;
     }
     return columnEl;
+  }
+
+  // ── Toggle Button ────────────────────────────────────────
+
+  async function injectToggleButton() {
+    if (document.querySelector(`.${TOGGLE_CLASS}`)) return;
+
+    // Insert near the board header area
+    const headerBar =
+      document.querySelector('[data-testid="board-view-filter-bar"]') ??
+      document.querySelector(".Board-module__boardHeaderContainer") ??
+      document.querySelector('[data-hpc] > div > div');
+
+    const anchor = headerBar ?? document.querySelector('[data-board-column]')?.parentElement;
+    if (!anchor) return;
+
+    const { gp_visible } = await chrome.storage.sync.get("gp_visible");
+    const visible = gp_visible !== false;
+
+    const btn = document.createElement("button");
+    btn.className = TOGGLE_CLASS;
+    btn.title = visible ? "Hide personal tasks" : "Show personal tasks";
+    btn.innerHTML = `<span class="gp-toggle-icon">${visible ? "👤" : "👤"}</span><span class="gp-toggle-label">${visible ? "Personal: ON" : "Personal: OFF"}</span>`;
+    btn.classList.toggle("gp-toggle-off", !visible);
+
+    btn.addEventListener("click", async () => {
+      const { gp_visible: current } = await chrome.storage.sync.get("gp_visible");
+      const next = current === false;
+      await chrome.storage.sync.set({ gp_visible: next });
+      btn.title = next ? "Hide personal tasks" : "Show personal tasks";
+      btn.querySelector(".gp-toggle-label").textContent = next ? "Personal: ON" : "Personal: OFF";
+      btn.classList.toggle("gp-toggle-off", !next);
+      injectCards();
+    });
+
+    isSelfMutation = true;
+    if (headerBar) {
+      headerBar.appendChild(btn);
+    } else {
+      anchor.insertBefore(btn, anchor.firstChild);
+    }
+    isSelfMutation = false;
   }
 
   // ── Card Injection ───────────────────────────────────────
@@ -407,6 +450,7 @@
     initialized = true;
 
     setTimeout(() => {
+      injectToggleButton();
       injectCards();
       setupDropZones();
     }, 500);
@@ -417,7 +461,7 @@
     const target = mutation.target;
     if (!target || !target.closest) return false;
     // Ignore changes inside our own injected elements
-    if (target.closest(`.${CARD_CLASS}`) || target.closest(`.${ADD_BTN_CLASS}`) || target.closest(`.${MODAL_CLASS}`)) return true;
+    if (target.closest(`.${CARD_CLASS}`) || target.closest(`.${ADD_BTN_CLASS}`) || target.closest(`.${MODAL_CLASS}`) || target.closest(`.${TOGGLE_CLASS}`)) return true;
     // Ignore changes inside existing GitHub board cards (tooltips, hover effects, etc.)
     if (target.closest('[data-board-column]') && !target.hasAttribute('data-board-column')) return true;
     return false;

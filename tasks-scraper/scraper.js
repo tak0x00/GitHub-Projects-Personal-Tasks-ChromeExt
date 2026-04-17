@@ -303,11 +303,13 @@
 
     await saveToCache(email, taskListData);
 
-    chrome.runtime.sendMessage({
-      type: "SYNC_COMPLETE",
-      email,
-      taskCount: taskListData.tasks.length,
-    });
+    try {
+      await chrome.runtime.sendMessage({
+        type: "SYNC_COMPLETE",
+        email,
+        taskCount: taskListData.tasks.length,
+      });
+    } catch { /* SW inactive or extension context invalidated after reload */ }
   }
 
   function waitForTasks() {

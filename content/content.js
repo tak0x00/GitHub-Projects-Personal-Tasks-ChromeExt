@@ -384,7 +384,7 @@
             chrome.runtime.sendMessage({
               type: isDone ? "WRITEBACK_DONE" : "WRITEBACK_UNDONE",
               gcalSource: updated.gcalSource,
-            });
+            }).catch(() => {});
           }
         }
       });
@@ -459,8 +459,9 @@
       overlay.querySelector(".gp-import-empty").style.display = "none";
       overlay.querySelector(".gp-import-body").style.display = "none";
       overlay.querySelector(".gp-import-loading").style.display = "block";
-      await chrome.runtime.sendMessage({ type: "SYNC_TASKS" });
-      await new Promise((r) => setTimeout(r, 2000));
+      try {
+        await chrome.runtime.sendMessage({ type: "SYNC_TASKS" });
+      } catch { /* context invalidated */ }
       await populateImportModal(overlay, status, projectUrl);
     }
 
@@ -481,7 +482,10 @@
     const actions = overlay.querySelector(".gp-modal-actions");
 
     // Get cached data
-    const response = await chrome.runtime.sendMessage({ type: "GET_CACHED_TASKS" });
+    let response;
+    try {
+      response = await chrome.runtime.sendMessage({ type: "GET_CACHED_TASKS" });
+    } catch { /* context invalidated */ }
     const cache = response?.cache ?? {};
     const accounts = Object.values(cache);
 

@@ -20,13 +20,13 @@
       return;
     }
 
-    // Check which accounts have open tabs
+    // Single-account mode: Active if any tasks.google.com tab is open
     const openTabs = await chrome.tabs.query({ url: "https://tasks.google.com/*" });
-    const openTabIds = new Set(openTabs.map((t) => t.id));
+    const hasActiveTab = openTabs.length > 0;
 
     accountList.innerHTML = "";
     for (const account of accounts) {
-      const isActive = account.tabId != null && openTabIds.has(account.tabId);
+      const isActive = hasActiveTab;
       const card = document.createElement("div");
       card.className = "account-card";
 

@@ -11,25 +11,17 @@
 
   // ── Tab Group Management ─────────────────────────────────
 
-  /**
-   * Find existing tasks.google.com tabs managed by this extension.
-   */
   async function findTasksTabs() {
-    const tabs = await chrome.tabs.query({ url: "https://tasks.google.com/*" });
-    return tabs;
+    return chrome.tabs.query({ url: "https://tasks.google.com/*" });
   }
 
-  /**
-   * Find or create the "GP Tasks" tab group.
-   */
   async function findOrCreateTabGroup(windowId) {
     const groups = await chrome.tabGroups.query({ title: TAB_GROUP_TITLE, windowId });
     return groups.length > 0 ? groups[0] : null;
   }
 
   /**
-   * Ensure at least one tasks.google.com tab exists (for writeback).
-   * Returns the first available tab.
+   * Ensure a single tasks.google.com tab exists. Returns the tab.
    */
   async function ensureTasksTab() {
     const existingTabs = await findTasksTabs();
@@ -40,29 +32,16 @@
       return tab;
     }
 
-    const tab = await chrome.tabs.create({ url: TASKS_URL, active: false });
+    const tab = await chrome.tabs.create({ url: TASKS_URL, active: true });
     await ensureTabInGroup(tab);
     return tab;
   }
 
-  /**
-   * Open a new tasks.google.com tab for adding an account.
-   * Skips group management so the tab is always immediately visible.
-   * (Group membership is handled lazily by ensureTasksTab during writeback.)
-   */
-  async function openNewTasksTab() {
-    return chrome.tabs.create({ url: TASKS_URL, active: true });
-  }
-
-  /**
-   * Put a tab into the GP Tasks group (collapsed).
-   */
   async function ensureTabInGroup(tab) {
     try {
       const existingGroup = await findOrCreateTabGroup(tab.windowId);
 
       if (existingGroup && tab.groupId === existingGroup.id) {
-        // Already in the right group, just ensure collapsed
         await chrome.tabGroups.update(existingGroup.id, { collapsed: true });
         return;
       }
@@ -89,10 +68,10 @@
 
     switch (message.type) {
       case "ENSURE_TASKS_TAB":
-        openNewTasksTab()
+        ensureTasksTab()
           .then((tab) => sendResponse({ success: true, tabId: tab.id }))
           .catch((e) => sendResponse({ success: false, error: e.message }));
-        return true; // async response
+        return true;
 
       case "SYNC_TASKS":
         handleSyncTasks()
@@ -101,22 +80,8 @@
         return true;
 
       case "SYNC_COMPLETE":
-        // Store tabId so the options page can show Active/Inactive status.
-        // Must be async (return true) so the storage write completes before SW sleeps.
-        (async () => {
-          if (message.email && sender.tab?.id) {
-            try {
-              const result = await chrome.storage.local.get("gp_gcal_cache");
-              const cache = result["gp_gcal_cache"] ?? {};
-              if (cache[message.email]) {
-                cache[message.email].tabId = sender.tab.id;
-                await chrome.storage.local.set({ "gp_gcal_cache": cache });
-              }
-            } catch {}
-          }
-          sendResponse({ success: true });
-        })();
-        return true;
+        sendResponse({ success: true });
+        return false;
 
       case "WRITEBACK_DONE":
       case "WRITEBACK_UNDONE":
@@ -137,56 +102,30 @@
   });
 
   /**
-   * Trigger a sync by reloading the tasks tab and waiting for autoSync to complete.
-   * Background tabs don't render task DOM unless freshly loaded, so we reload the tab
-   * and let the scraper's autoSync (which runs on document_idle) write to the cache.
-   * We avoid sending SCRAPE_TASKS via sendMessage to prevent "Receiving end does not exist" errors.
+   * Reload the single tasks.google.com tab and wait for autoSync to update the cache.
    */
   async function handleSyncTasks() {
-    let tabs = await findTasksTabs();
-
-    if (tabs.length === 0) {
-      // No tabs yet — open one and wait for it
-      const tab = await ensureTasksTab();
-      tabs = [tab];
-    }
-
-    // Reload all account tabs in parallel so each autoSync fires
-    await Promise.all(tabs.map(async (tab) => {
-      await chrome.tabs.reload(tab.id);
-      await waitForTabLoad(tab.id);
-    }));
-
-    // Wait for all autoSyncs to write to cache (one update per account)
-    await waitForNCacheUpdates(tabs.length, 6000);
-
+    const tab = await ensureTasksTab();
+    await chrome.tabs.reload(tab.id);
+    await waitForTabLoad(tab.id);
+    await waitForCacheUpdate(6000);
     return { success: true };
   }
 
-  /**
-   * Wait until the cache has been updated N times, or until timeout elapses.
-   */
-  function waitForNCacheUpdates(n, timeout) {
+  function waitForCacheUpdate(timeout) {
     return new Promise((resolve) => {
-      let count = 0;
       const timer = setTimeout(resolve, timeout);
       const listener = (changes, area) => {
         if (area === "local" && changes["gp_gcal_cache"]) {
-          count++;
-          if (count >= n) {
-            clearTimeout(timer);
-            chrome.storage.onChanged.removeListener(listener);
-            resolve();
-          }
+          clearTimeout(timer);
+          chrome.storage.onChanged.removeListener(listener);
+          resolve();
         }
       };
       chrome.storage.onChanged.addListener(listener);
     });
   }
 
-  /**
-   * Forward a writeback request to the tasks.google.com content script.
-   */
   async function handleWriteback(message) {
     const tab = await ensureTasksTab();
 
@@ -217,15 +156,10 @@
       };
       chrome.tabs.onUpdated.addListener(listener);
 
-      // Timeout after 15s
       setTimeout(() => {
         chrome.tabs.onUpdated.removeListener(listener);
         resolve();
       }, 15000);
     });
-  }
-
-  function sleep(ms) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 })();

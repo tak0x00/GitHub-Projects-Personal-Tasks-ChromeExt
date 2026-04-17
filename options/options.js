@@ -20,21 +20,16 @@
       return;
     }
 
-    // Active = account whose tabId matches the FIRST tab in the GP Tasks group.
-    // Only the first tab counts — this enforces single-account-active policy.
-    let activeTabId = null;
-    const groups = await chrome.tabGroups.query({ title: "GP Tasks" });
-    if (groups.length > 0) {
-      const groupTabs = await chrome.tabs.query({
-        groupId: groups[0].id,
-        url: "https://tasks.google.com/*",
-      });
-      activeTabId = groupTabs[0]?.id ?? null;
-    }
+    // Active = email currently shown in the first GP Tasks group tab (real-time query).
+    let activeEmail = null;
+    try {
+      const r = await chrome.runtime.sendMessage({ type: "GET_ACTIVE_ACCOUNT" });
+      activeEmail = r?.email ?? null;
+    } catch {}
 
     accountList.innerHTML = "";
     for (const account of accounts) {
-      const isActive = activeTabId != null && account.tabId === activeTabId;
+      const isActive = account.email === activeEmail;
       const card = document.createElement("div");
       card.className = "account-card";
 

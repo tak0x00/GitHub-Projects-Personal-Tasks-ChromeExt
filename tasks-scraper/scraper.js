@@ -363,6 +363,11 @@
         return true; // async
       }
 
+      case "GET_CURRENT_EMAIL": {
+        sendResponse({ email: detectAccountEmail() });
+        return false;
+      }
+
       default:
         return false;
     }

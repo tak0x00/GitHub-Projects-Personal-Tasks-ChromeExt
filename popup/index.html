@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Personal Tasks</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-container">
+    <header>
+      <h1>Personal Tasks</h1>
+      <span class="task-count" id="taskCount">0</span>
+    </header>
+
+    <div id="quickAdd" class="quick-add">
+      <input type="text" id="quickTitle" placeholder="Add a task... (Enter to save)">
+      <select id="quickStatus">
+        <option value="Todo">Todo</option>
+        <option value="In Progress">In Progress</option>
+        <option value="Done">Done</option>
+      </select>
+    </div>
+
+    <div id="taskList" class="task-list">
+      <div class="empty-state">No tasks yet. Add one above!</div>
+    </div>
+
+    <footer>
+      <label class="toggle-label">
+        <input type="checkbox" id="toggleVisibility" checked>
+        Show on board
+      </label>
+    </footer>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

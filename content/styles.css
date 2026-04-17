@@ -1,0 +1,260 @@
+/* Personal Task Card */
+.gp-personal-task-card {
+  position: relative;
+  padding: 12px;
+  margin: 4px 0;
+  background: var(--bgColor-default, #0d1117);
+  border: 1px solid var(--borderColor-default, #30363d);
+  border-left: 3px solid #8b5cf6;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+}
+
+.gp-personal-task-card:hover {
+  border-color: var(--borderColor-muted, #484f58);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.gp-personal-task-card.gp-task-dragging {
+  opacity: 0.5;
+}
+
+.gp-task-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.gp-task-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: rgba(139, 92, 246, 0.2);
+  color: #a78bfa;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.gp-task-delete {
+  background: none;
+  border: none;
+  color: var(--fgColor-muted, #8b949e);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: 4px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.gp-personal-task-card:hover .gp-task-delete {
+  opacity: 1;
+}
+
+.gp-task-delete:hover {
+  color: var(--fgColor-danger, #f85149);
+  background: rgba(248, 81, 73, 0.1);
+}
+
+.gp-task-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--fgColor-default, #e6edf3);
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.gp-task-desc {
+  font-size: 12px;
+  color: var(--fgColor-muted, #8b949e);
+  margin-top: 4px;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+/* Add Button */
+.gp-personal-task-add-btn {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  margin: 4px 0;
+  background: none;
+  border: 1px dashed var(--borderColor-default, #30363d);
+  border-radius: 6px;
+  color: var(--fgColor-muted, #8b949e);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.gp-personal-task-add-btn:hover {
+  color: var(--fgColor-default, #e6edf3);
+  border-color: var(--borderColor-muted, #484f58);
+  background: var(--bgColor-muted, #161b22);
+}
+
+/* Drop Target */
+.gp-drop-target {
+  background: rgba(139, 92, 246, 0.05) !important;
+  outline: 2px dashed rgba(139, 92, 246, 0.4);
+  outline-offset: -2px;
+  border-radius: 6px;
+}
+
+/* Modal Overlay */
+.gp-personal-task-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999999;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+}
+
+.gp-modal-content {
+  background: var(--bgColor-default, #0d1117);
+  border: 1px solid var(--borderColor-default, #30363d);
+  border-radius: 12px;
+  padding: 24px;
+  width: 420px;
+  max-width: 90vw;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.gp-modal-content h3 {
+  margin: 0 0 16px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--fgColor-default, #e6edf3);
+}
+
+.gp-modal-content label {
+  display: block;
+  margin-bottom: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fgColor-muted, #8b949e);
+}
+
+.gp-modal-content input[type="text"],
+.gp-modal-content textarea {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 8px 12px;
+  background: var(--bgColor-muted, #161b22);
+  border: 1px solid var(--borderColor-default, #30363d);
+  border-radius: 6px;
+  color: var(--fgColor-default, #e6edf3);
+  font-size: 14px;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.gp-modal-content textarea {
+  resize: vertical;
+  min-height: 60px;
+}
+
+.gp-modal-content input[type="text"]:focus,
+.gp-modal-content textarea:focus {
+  outline: none;
+  border-color: #8b5cf6;
+  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.3);
+}
+
+.gp-input-error {
+  border-color: var(--fgColor-danger, #f85149) !important;
+}
+
+/* Color Picker */
+.gp-color-picker {
+  margin-bottom: 16px;
+}
+
+.gp-color-picker > span {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fgColor-muted, #8b949e);
+}
+
+.gp-color-options {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.gp-color-option {
+  cursor: pointer;
+  display: inline-block !important;
+  margin-bottom: 0 !important;
+}
+
+.gp-color-option input {
+  display: none;
+}
+
+.gp-color-swatch {
+  display: block;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.gp-color-option input:checked + .gp-color-swatch {
+  border-color: #fff;
+  transform: scale(1.15);
+}
+
+.gp-color-swatch:hover {
+  transform: scale(1.1);
+}
+
+/* Modal Actions */
+.gp-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.gp-modal-cancel,
+.gp-modal-save {
+  padding: 6px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid var(--borderColor-default, #30363d);
+}
+
+.gp-modal-cancel {
+  background: transparent;
+  color: var(--fgColor-default, #e6edf3);
+}
+
+.gp-modal-cancel:hover {
+  background: var(--bgColor-muted, #161b22);
+}
+
+.gp-modal-save {
+  background: #8b5cf6;
+  color: #fff;
+  border-color: #8b5cf6;
+}
+
+.gp-modal-save:hover {
+  background: #7c3aed;
+}

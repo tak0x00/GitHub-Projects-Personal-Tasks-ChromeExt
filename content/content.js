@@ -507,22 +507,8 @@
     body.style.display = "block";
     actions.style.display = "flex";
 
-    // Account selector (if multiple)
     const accountSelect = overlay.querySelector(".gp-import-account-select");
-    if (accounts.length > 1) {
-      accountSelect.innerHTML = `
-        <label>Account
-          <select class="gp-import-account-dropdown">
-            ${accounts.map((a) => `<option value="${escapeAttr(a.email)}">${escapeHtml(a.email)}</option>`).join("")}
-          </select>
-        </label>
-      `;
-      accountSelect.querySelector("select").addEventListener("change", () => {
-        renderTaskList(overlay, accounts, importedIds, projectUrl);
-      });
-    } else {
-      accountSelect.innerHTML = `<div class="gp-import-account-label">${escapeHtml(accounts[0].email)}</div>`;
-    }
+    accountSelect.innerHTML = `<div class="gp-import-account-label">${escapeHtml(accounts[0].email)}</div>`;
 
     renderTaskList(overlay, accounts, importedIds, projectUrl);
 
@@ -532,7 +518,7 @@
       const checked = overlay.querySelectorAll('.gp-import-checkbox:checked');
       if (checked.length === 0) return;
 
-      const selectedEmail = overlay.querySelector(".gp-import-account-dropdown")?.value ?? accounts[0].email;
+      const selectedEmail = accounts[0].email;
 
       for (const cb of checked) {
         const taskData = JSON.parse(cb.dataset.task);
@@ -557,8 +543,7 @@
   }
 
   function renderTaskList(overlay, accounts, importedIds, projectUrl) {
-    const selectedEmail = overlay.querySelector(".gp-import-account-dropdown")?.value ?? accounts[0].email;
-    const account = accounts.find((a) => a.email === selectedEmail);
+    const account = accounts[0];
     if (!account) return;
 
     const listContainer = overlay.querySelector(".gp-import-task-list");

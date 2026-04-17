@@ -22,15 +22,23 @@
       </select>
     </div>
 
+    <div class="gcal-section">
+      <button id="syncBtn" class="sync-btn">Sync Google Tasks</button>
+      <span id="syncStatus" class="sync-status-text"></span>
+    </div>
+
     <div id="taskList" class="task-list">
       <div class="empty-state">No tasks yet. Add one above!</div>
     </div>
 
     <footer>
-      <label class="toggle-label">
-        <input type="checkbox" id="toggleVisibility" checked>
-        Show on board
-      </label>
+      <div class="footer-row">
+        <label class="toggle-label">
+          <input type="checkbox" id="toggleVisibility" checked>
+          Show on board
+        </label>
+        <a href="#" id="openSettings" class="settings-link">Settings</a>
+      </div>
     </footer>
   </div>
   <script src="popup.js"></script>

@@ -28,25 +28,29 @@
   }
 
   /**
-   * Ensure a tasks.google.com tab exists in the GP Tasks tab group.
-   * Returns the tab.
+   * Ensure at least one tasks.google.com tab exists (for writeback).
+   * Returns the first available tab.
    */
   async function ensureTasksTab() {
     const existingTabs = await findTasksTabs();
 
     if (existingTabs.length > 0) {
-      // Already have a tasks tab, ensure it's in a group
       const tab = existingTabs[0];
       await ensureTabInGroup(tab);
       return tab;
     }
 
-    // Create a new tab (inactive)
-    const tab = await chrome.tabs.create({
-      url: TASKS_URL,
-      active: false,
-    });
+    const tab = await chrome.tabs.create({ url: TASKS_URL, active: false });
+    await ensureTabInGroup(tab);
+    return tab;
+  }
 
+  /**
+   * Open a new tasks.google.com tab for adding an account.
+   * Always creates a fresh tab so the user can log into a different account.
+   */
+  async function openNewTasksTab() {
+    const tab = await chrome.tabs.create({ url: TASKS_URL, active: true });
     await ensureTabInGroup(tab);
     return tab;
   }
@@ -86,7 +90,7 @@
 
     switch (message.type) {
       case "ENSURE_TASKS_TAB":
-        ensureTasksTab()
+        openNewTasksTab()
           .then((tab) => sendResponse({ success: true, tabId: tab.id }))
           .catch((e) => sendResponse({ success: false, error: e.message }));
         return true; // async response
@@ -98,7 +102,16 @@
         return true;
 
       case "SYNC_COMPLETE":
-        // Scraper finished syncing — just acknowledge
+        // Store tabId so the options page can show Active/Inactive status
+        if (message.email && sender.tab?.id) {
+          chrome.storage.local.get("gp_gcal_cache").then((result) => {
+            const cache = result["gp_gcal_cache"] ?? {};
+            if (cache[message.email]) {
+              cache[message.email].tabId = sender.tab.id;
+              return chrome.storage.local.set({ "gp_gcal_cache": cache });
+            }
+          }).catch(() => {});
+        }
         sendResponse({ success: true });
         return false;
 
@@ -121,28 +134,51 @@
   });
 
   /**
-   * Trigger a sync by ensuring the tasks tab exists and sending it a scrape request.
+   * Trigger a sync by reloading the tasks tab and waiting for autoSync to complete.
+   * Background tabs don't render task DOM unless freshly loaded, so we reload the tab
+   * and let the scraper's autoSync (which runs on document_idle) write to the cache.
+   * We avoid sending SCRAPE_TASKS via sendMessage to prevent "Receiving end does not exist" errors.
    */
   async function handleSyncTasks() {
-    const tab = await ensureTasksTab();
+    let tabs = await findTasksTabs();
 
-    // Wait for the tab to finish loading
-    if (tab.status !== "complete") {
-      await waitForTabLoad(tab.id);
+    if (tabs.length === 0) {
+      // No tabs yet — open one and wait for it
+      const tab = await ensureTasksTab();
+      tabs = [tab];
     }
 
-    // Send scrape request to the content script
-    try {
-      const response = await chrome.tabs.sendMessage(tab.id, { type: "SCRAPE_TASKS" });
-      return response ?? { success: true };
-    } catch (e) {
-      // Content script may not be ready yet — reload and retry
+    // Reload all account tabs in parallel so each autoSync fires
+    await Promise.all(tabs.map(async (tab) => {
       await chrome.tabs.reload(tab.id);
       await waitForTabLoad(tab.id);
-      await sleep(1000);
-      const response = await chrome.tabs.sendMessage(tab.id, { type: "SCRAPE_TASKS" });
-      return response ?? { success: true };
-    }
+    }));
+
+    // Wait for all autoSyncs to write to cache (one update per account)
+    await waitForNCacheUpdates(tabs.length, 6000);
+
+    return { success: true };
+  }
+
+  /**
+   * Wait until the cache has been updated N times, or until timeout elapses.
+   */
+  function waitForNCacheUpdates(n, timeout) {
+    return new Promise((resolve) => {
+      let count = 0;
+      const timer = setTimeout(resolve, timeout);
+      const listener = (changes, area) => {
+        if (area === "local" && changes["gp_gcal_cache"]) {
+          count++;
+          if (count >= n) {
+            clearTimeout(timer);
+            chrome.storage.onChanged.removeListener(listener);
+            resolve();
+          }
+        }
+      };
+      chrome.storage.onChanged.addListener(listener);
+    });
   }
 
   /**

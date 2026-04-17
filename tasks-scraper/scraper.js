@@ -1,0 +1,342 @@
+/**
+ * tasks.google.com Content Script — Scraper & Writeback
+ *
+ * Scrapes task lists and tasks from the Google Tasks web UI.
+ * Also handles writeback (completing/uncompleting tasks via DOM manipulation).
+ *
+ * NOTE: Google Tasks DOM selectors are discovered empirically and may break
+ * when Google updates their UI. Update selectors as needed.
+ */
+(() => {
+  "use strict";
+
+  const CACHE_KEY = "gp_gcal_cache";
+
+  // ── DOM Selectors ────────────────────────────────────────
+  // These selectors target tasks.google.com's current DOM structure.
+  // They may need updating if Google changes their UI.
+
+  const SELECTORS = {
+    // Task list sidebar items
+    taskListItems: [
+      'div[role="option"]',           // list selector items
+      'li[data-list-id]',             // alternative
+    ],
+    // Active/visible task list name
+    taskListTitle: [
+      'h2',                           // main heading
+      '[data-list-title]',
+      '.VfPpkd-rymPhb-fpDzbe-fmcmS',  // material design title
+    ],
+    // Individual task rows
+    taskRows: [
+      'div[role="treeitem"]',
+      'div[data-task-id]',
+      '.I5ryNb',                       // known class for task items
+    ],
+    // Task title within a row
+    taskTitle: [
+      '[data-task-title]',
+      '.K1Svhf',                       // known task title class
+      '[contenteditable]',
+      'span[role="link"]',
+    ],
+    // Task completion checkbox
+    taskCheckbox: [
+      'div[role="checkbox"]',
+      'button[aria-label*="complete"]',
+      'button[aria-label*="Complete"]',
+      '.TZAGl',                        // known checkbox class
+    ],
+    // Task details (notes, due date)
+    taskNotes: [
+      '[data-task-notes]',
+      '.YVu7Qd',                       // known notes class
+    ],
+    taskDueDate: [
+      '[data-task-due]',
+      '.d9QCpf',                       // known due date class
+    ],
+    // User account info
+    userEmail: [
+      'a[aria-label*="Google Account"]',
+      '[data-email]',
+      'img[data-profileimagefallback]',
+    ],
+  };
+
+  /**
+   * Try multiple selectors and return the first match.
+   */
+  function querySelector(parent, selectorList) {
+    for (const sel of selectorList) {
+      const el = parent.querySelector(sel);
+      if (el) return el;
+    }
+    return null;
+  }
+
+  function querySelectorAll(parent, selectorList) {
+    for (const sel of selectorList) {
+      const els = parent.querySelectorAll(sel);
+      if (els.length > 0) return Array.from(els);
+    }
+    return [];
+  }
+
+  // ── Account Detection ────────────────────────────────────
+
+  function detectAccountEmail() {
+    // Try to find email from Google account widget
+    for (const sel of SELECTORS.userEmail) {
+      const el = document.querySelector(sel);
+      if (el) {
+        const label = el.getAttribute("aria-label") ?? "";
+        const emailMatch = label.match(/[\w.+-]+@[\w.-]+/);
+        if (emailMatch) return emailMatch[0];
+
+        const dataEmail = el.getAttribute("data-email");
+        if (dataEmail) return dataEmail;
+      }
+    }
+
+    // Try meta tags
+    const meta = document.querySelector('meta[name="google-signin-client_id"]');
+    if (meta) {
+      // Can't get email from client_id, but presence indicates logged in
+    }
+
+    // Fallback: extract from URL or cookies
+    return "unknown@account";
+  }
+
+  // ── Task Scraping ────────────────────────────────────────
+
+  function scrapeCurrentTaskList() {
+    const title = getTaskListTitle();
+    const tasks = scrapeTaskRows();
+    return { title: title ?? "Tasks", tasks };
+  }
+
+  function getTaskListTitle() {
+    for (const sel of SELECTORS.taskListTitle) {
+      const el = document.querySelector(sel);
+      if (el && el.textContent?.trim()) return el.textContent.trim();
+    }
+    return null;
+  }
+
+  function scrapeTaskRows() {
+    const rows = querySelectorAll(document, SELECTORS.taskRows);
+    const tasks = [];
+
+    for (const row of rows) {
+      const titleEl = querySelector(row, SELECTORS.taskTitle);
+      const title = titleEl?.textContent?.trim();
+      if (!title) continue;
+
+      const checkboxEl = querySelector(row, SELECTORS.taskCheckbox);
+      const isCompleted =
+        checkboxEl?.getAttribute("aria-checked") === "true" ||
+        checkboxEl?.classList.contains("checked") ||
+        row.classList.contains("completed");
+
+      const notesEl = querySelector(row, SELECTORS.taskNotes);
+      const dueDateEl = querySelector(row, SELECTORS.taskDueDate);
+
+      // Generate a stable ID from content (since we don't have real IDs)
+      const id = row.getAttribute("data-task-id") ?? generateStableId(title);
+
+      tasks.push({
+        id,
+        title,
+        notes: notesEl?.textContent?.trim() ?? "",
+        due: dueDateEl?.textContent?.trim() ?? "",
+        completed: isCompleted,
+      });
+    }
+
+    return tasks;
+  }
+
+  function generateStableId(title) {
+    // Simple hash for stable identification
+    let hash = 0;
+    for (let i = 0; i < title.length; i++) {
+      hash = ((hash << 5) - hash + title.charCodeAt(i)) | 0;
+    }
+    return "gpt_" + Math.abs(hash).toString(36);
+  }
+
+  // ── Cache ────────────────────────────────────────────────
+
+  async function saveToCache(email, taskListData) {
+    const result = await chrome.storage.local.get(CACHE_KEY);
+    const cache = result[CACHE_KEY] ?? {};
+
+    if (!cache[email]) {
+      cache[email] = { email, syncedAt: 0, taskLists: [] };
+    }
+
+    // Update or add the task list
+    const existing = cache[email].taskLists.findIndex(
+      (tl) => tl.title === taskListData.title
+    );
+    if (existing >= 0) {
+      cache[email].taskLists[existing] = taskListData;
+    } else {
+      cache[email].taskLists.push(taskListData);
+    }
+
+    cache[email].syncedAt = Date.now();
+    await chrome.storage.local.set({ [CACHE_KEY]: cache });
+
+    return cache[email];
+  }
+
+  // ── Writeback ────────────────────────────────────────────
+
+  function completeTask(taskId) {
+    return toggleTaskCompletion(taskId, true);
+  }
+
+  function uncompleteTask(taskId) {
+    return toggleTaskCompletion(taskId, false);
+  }
+
+  function toggleTaskCompletion(taskId, shouldComplete) {
+    const rows = querySelectorAll(document, SELECTORS.taskRows);
+
+    for (const row of rows) {
+      const rowId = row.getAttribute("data-task-id") ?? "";
+      const titleEl = querySelector(row, SELECTORS.taskTitle);
+      const title = titleEl?.textContent?.trim() ?? "";
+      const stableId = generateStableId(title);
+
+      if (rowId === taskId || stableId === taskId) {
+        const checkbox = querySelector(row, SELECTORS.taskCheckbox);
+        if (!checkbox) {
+          return { success: false, error: "Checkbox not found for task" };
+        }
+
+        const isCompleted =
+          checkbox.getAttribute("aria-checked") === "true" ||
+          checkbox.classList.contains("checked");
+
+        if (isCompleted === shouldComplete) {
+          // Already in desired state
+          return { success: true, alreadyInState: true };
+        }
+
+        // Click the checkbox
+        checkbox.click();
+        return { success: true };
+      }
+    }
+
+    return { success: false, error: "Task not found: " + taskId };
+  }
+
+  // ── Auto Sync on Page Load ───────────────────────────────
+
+  async function autoSync() {
+    // Wait for tasks to render
+    await waitForTasks();
+
+    const email = detectAccountEmail();
+    const taskListData = scrapeCurrentTaskList();
+
+    await saveToCache(email, taskListData);
+
+    chrome.runtime.sendMessage({
+      type: "SYNC_COMPLETE",
+      email,
+      taskCount: taskListData.tasks.length,
+    });
+  }
+
+  function waitForTasks() {
+    return new Promise((resolve) => {
+      let attempts = 0;
+      const check = () => {
+        const rows = querySelectorAll(document, SELECTORS.taskRows);
+        if (rows.length > 0 || attempts > 20) {
+          resolve();
+          return;
+        }
+        attempts++;
+        setTimeout(check, 500);
+      };
+      check();
+    });
+  }
+
+  // ── Message Listener ─────────────────────────────────────
+
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (!message || !message.type) return false;
+
+    switch (message.type) {
+      case "SCRAPE_TASKS": {
+        (async () => {
+          await waitForTasks();
+          const email = detectAccountEmail();
+          const taskListData = scrapeCurrentTaskList();
+          const cached = await saveToCache(email, taskListData);
+          sendResponse({
+            success: true,
+            email,
+            taskCount: taskListData.tasks.length,
+          });
+        })();
+        return true;
+      }
+
+      case "COMPLETE_TASK": {
+        const result = completeTask(message.gcalSource?.taskId);
+        sendResponse(result);
+        return false;
+      }
+
+      case "UNCOMPLETE_TASK": {
+        const result = uncompleteTask(message.gcalSource?.taskId);
+        sendResponse(result);
+        return false;
+      }
+
+      default:
+        return false;
+    }
+  });
+
+  // ── Indicator Badge ──────────────────────────────────────
+
+  function injectSyncIndicator() {
+    if (document.querySelector(".gp-sync-indicator")) return;
+
+    const badge = document.createElement("div");
+    badge.className = "gp-sync-indicator";
+    badge.style.cssText = `
+      position: fixed; bottom: 16px; right: 16px; z-index: 99999;
+      background: #8b5cf6; color: #fff; padding: 6px 12px;
+      border-radius: 8px; font-size: 12px; font-family: sans-serif;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3); opacity: 0.9;
+      cursor: default; user-select: none;
+    `;
+    badge.textContent = "✓ GP Tasks synced";
+    document.body.appendChild(badge);
+
+    // Fade out after 3 seconds
+    setTimeout(() => {
+      badge.style.transition = "opacity 0.5s ease";
+      badge.style.opacity = "0";
+      setTimeout(() => badge.remove(), 500);
+    }, 3000);
+  }
+
+  // ── Init ─────────────────────────────────────────────────
+
+  autoSync().then(() => {
+    injectSyncIndicator();
+  });
+})();

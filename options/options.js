@@ -47,7 +47,7 @@
 
       const actionBtn = isActive
         ? `<button class="btn btn-small btn-secondary sync-btn" data-email="${escapeAttr(account.email)}">Sync</button>`
-        : `<button class="btn btn-small btn-secondary open-tab-btn" data-email="${escapeAttr(account.email)}">Open Tab</button>`;
+        : ``;
 
       card.innerHTML = `
         <div class="account-info">
@@ -110,17 +110,8 @@
       });
     });
 
-    // Open Tab button (inactive accounts)
-    accountList.querySelectorAll(".open-tab-btn").forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        syncStatus.textContent = "Opening tab...";
-        await chrome.runtime.sendMessage({ type: "ENSURE_TASKS_TAB" });
-        syncStatus.textContent = "Tab opened — switch to the right Google account if needed.";
-        setTimeout(() => { syncStatus.textContent = ""; }, 6000);
-        // Re-render after a moment to pick up the new tab
-        setTimeout(render, 4000);
-      });
-    });
+    // Hide Add Account button when an account is already active
+    addAccountBtn.style.display = activeEmail ? "none" : "";
   }
 
   // ── Add Account ──────────────────────────────────────────

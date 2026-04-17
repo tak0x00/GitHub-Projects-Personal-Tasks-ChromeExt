@@ -110,8 +110,16 @@
       });
     });
 
-    // Hide Add Account button when an account is already active
-    addAccountBtn.style.display = activeEmail ? "none" : "";
+    // Button states:
+    //   active account exists  → hidden
+    //   accounts exist but all inactive → "Open Sync Tab"
+    //   no accounts yet        → "+ Add Account"
+    if (activeEmail) {
+      addAccountBtn.style.display = "none";
+    } else {
+      addAccountBtn.style.display = "";
+      addAccountBtn.textContent = accounts.length > 0 ? "Open Sync Tab" : "+ Add Account";
+    }
   }
 
   // ── Add Account ──────────────────────────────────────────

@@ -63,6 +63,16 @@
     return true;
   }
 
+  // ── Context Guard ────────────────────────────────────────
+
+  function isContextValid() {
+    try {
+      return !!chrome.runtime?.id;
+    } catch {
+      return false;
+    }
+  }
+
   // ── GitHub DOM Helpers ───────────────────────────────────
 
   function isProjectBoardView() {
@@ -153,6 +163,7 @@
   // ── Toggle Button ────────────────────────────────────────
 
   async function injectToggleButton() {
+    if (!isContextValid()) return;
     if (document.querySelector(`.${TOGGLE_CLASS}`)) return;
 
     // Insert near the board header area
@@ -202,7 +213,7 @@
 
   async function injectCards() {
     // Prevent concurrent runs — if already injecting, skip
-    if (injectLock) return;
+    if (injectLock || !isContextValid()) return;
     injectLock = true;
     isSelfMutation = true;
 
@@ -469,7 +480,7 @@
 
   // MutationObserver for SPA navigation
   const observer = new MutationObserver((mutations) => {
-    if (isSelfMutation || isDragging) return;
+    if (isSelfMutation || isDragging || !isContextValid()) return;
 
     const relevant = mutations.some(
       (m) => m.type === "childList" &&

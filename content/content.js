@@ -431,6 +431,8 @@
           <button class="gp-import-sync-btn">Sync Now</button>
         </div>
         <div class="gp-modal-actions" style="display:none">
+          <button class="gp-import-refresh-btn" title="Reload tasks from Google Tasks">Reload</button>
+          <span style="flex:1"></span>
           <button class="gp-modal-cancel">Cancel</button>
           <button class="gp-modal-save gp-import-btn" disabled>Import Selected</button>
         </div>
@@ -444,15 +446,21 @@
       if (e.target === overlay) overlay.remove();
     });
 
-    // Sync button for empty state
-    overlay.querySelector(".gp-import-sync-btn")?.addEventListener("click", async () => {
+    // Shared sync-and-reload handler
+    async function syncAndReload() {
       overlay.querySelector(".gp-import-empty").style.display = "none";
+      overlay.querySelector(".gp-import-body").style.display = "none";
       overlay.querySelector(".gp-import-loading").style.display = "block";
       await chrome.runtime.sendMessage({ type: "SYNC_TASKS" });
-      // Wait for sync
       await new Promise((r) => setTimeout(r, 2000));
       await populateImportModal(overlay, status, projectUrl);
-    });
+    }
+
+    // Sync button for empty state
+    overlay.querySelector(".gp-import-sync-btn")?.addEventListener("click", syncAndReload);
+
+    // Reload button in action bar
+    overlay.querySelector(".gp-import-refresh-btn")?.addEventListener("click", syncAndReload);
 
     // Load cached tasks
     await populateImportModal(overlay, status, projectUrl);

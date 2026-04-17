@@ -135,17 +135,42 @@
 
     for (const row of rows) {
       const titleEl = querySelector(row, SELECTORS.taskTitle);
-      const title = titleEl?.textContent?.trim();
+      const rawTitle = titleEl?.textContent?.trim() ?? "";
+      const titlePlaceholder = titleEl?.getAttribute("data-placeholder") ?? "";
+      // Skip if empty or if text is just the placeholder
+      const title = (rawTitle && rawTitle !== titlePlaceholder) ? rawTitle : "";
       if (!title) continue;
 
+      // Detect completed tasks:
+      // 1. checkbox aria-checked
+      // 2. row or ancestor has completed-related styling/class
+      // 3. row is inside a "completed" section (折りたたみ「完了」セクション)
       const checkboxEl = querySelector(row, SELECTORS.taskCheckbox);
       const isCompleted =
         checkboxEl?.getAttribute("aria-checked") === "true" ||
         checkboxEl?.classList.contains("checked") ||
-        row.classList.contains("completed");
+        row.classList.contains("completed") ||
+        row.closest('[aria-label*="完了"]') !== null ||
+        row.closest('[aria-label*="Completed"]') !== null ||
+        row.closest('[data-completed="true"]') !== null ||
+        // Check if the row has strikethrough text (common for completed tasks)
+        (titleEl && getComputedStyle(titleEl).textDecoration.includes("line-through"));
 
       const notesEl = querySelector(row, SELECTORS.taskNotes);
       const dueDateEl = querySelector(row, SELECTORS.taskDueDate);
+
+      // Read notes carefully: contenteditable fields show placeholder text
+      // when empty, so only read if there's actual user content
+      let notes = "";
+      if (notesEl) {
+        const hasPlaceholder = notesEl.hasAttribute("data-placeholder");
+        const text = notesEl.textContent?.trim() ?? "";
+        const placeholder = notesEl.getAttribute("data-placeholder") ?? "";
+        // If the text matches the placeholder, it's empty
+        if (text && text !== placeholder) {
+          notes = text;
+        }
+      }
 
       // Use data-id attribute (e.g. "86ri0OoHBh7YRcTh") or generate stable ID
       const id = row.getAttribute("data-id") ?? row.getAttribute("data-task-id") ?? generateStableId(title);
@@ -153,7 +178,7 @@
       tasks.push({
         id,
         title,
-        notes: notesEl?.textContent?.trim() ?? "",
+        notes,
         due: dueDateEl?.textContent?.trim() ?? "",
         completed: isCompleted,
       });

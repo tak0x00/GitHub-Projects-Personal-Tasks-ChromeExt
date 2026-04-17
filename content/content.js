@@ -176,23 +176,31 @@
     const anchor = headerBar ?? document.querySelector('[data-board-column]')?.parentElement;
     if (!anchor) return;
 
-    const { gp_visible } = await chrome.storage.sync.get("gp_visible");
-    const visible = gp_visible !== false;
+    let visible = true;
+    try {
+      const result = await chrome.storage.sync.get("gp_visible");
+      visible = result.gp_visible !== false;
+    } catch {
+      return; // context invalidated during await
+    }
 
     const btn = document.createElement("button");
     btn.className = TOGGLE_CLASS;
     btn.title = visible ? "Hide personal tasks" : "Show personal tasks";
-    btn.innerHTML = `<span class="gp-toggle-icon">${visible ? "👤" : "👤"}</span><span class="gp-toggle-label">${visible ? "Personal: ON" : "Personal: OFF"}</span>`;
+    btn.innerHTML = `<span class="gp-toggle-icon">👤</span><span class="gp-toggle-label">${visible ? "Personal: ON" : "Personal: OFF"}</span>`;
     btn.classList.toggle("gp-toggle-off", !visible);
 
     btn.addEventListener("click", async () => {
-      const { gp_visible: current } = await chrome.storage.sync.get("gp_visible");
-      const next = current === false;
-      await chrome.storage.sync.set({ gp_visible: next });
-      btn.title = next ? "Hide personal tasks" : "Show personal tasks";
-      btn.querySelector(".gp-toggle-label").textContent = next ? "Personal: ON" : "Personal: OFF";
-      btn.classList.toggle("gp-toggle-off", !next);
-      injectCards();
+      if (!isContextValid()) return;
+      try {
+        const { gp_visible: current } = await chrome.storage.sync.get("gp_visible");
+        const next = current === false;
+        await chrome.storage.sync.set({ gp_visible: next });
+        btn.title = next ? "Hide personal tasks" : "Show personal tasks";
+        btn.querySelector(".gp-toggle-label").textContent = next ? "Personal: ON" : "Personal: OFF";
+        btn.classList.toggle("gp-toggle-off", !next);
+        injectCards();
+      } catch { /* context invalidated */ }
     });
 
     isSelfMutation = true;

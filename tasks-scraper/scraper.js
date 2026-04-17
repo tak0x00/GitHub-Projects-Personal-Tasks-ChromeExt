@@ -233,7 +233,36 @@
   }
 
   function toggleTaskCompletion(taskId, shouldComplete) {
-    const rows = querySelectorAll(document, SELECTORS.taskRows);
+    // Search ALL task rows on the page, including the completed section.
+    // When a task is completed, Google Tasks moves it to a collapsed "完了" section.
+    // To uncomplete it, we may need to expand that section first.
+    let rows = querySelectorAll(document, SELECTORS.taskRows);
+
+    // If uncompleting and task not found in visible rows, try expanding the completed section
+    if (!shouldComplete) {
+      const found = rows.some((row) => {
+        const rowId = row.getAttribute("data-id") ?? row.getAttribute("data-task-id") ?? "";
+        const titleEl = querySelector(row, SELECTORS.taskTitle);
+        const stableId = generateStableId(titleEl?.textContent?.trim() ?? "");
+        return rowId === taskId || stableId === taskId;
+      });
+
+      if (!found) {
+        // Try to expand the completed section by clicking its header
+        const completedHeaders = document.querySelectorAll(
+          'div[role="button"], button, [aria-expanded]'
+        );
+        for (const header of completedHeaders) {
+          const text = header.textContent ?? "";
+          if ((text.includes("完了") || text.includes("Completed")) && header.getAttribute("aria-expanded") === "false") {
+            header.click();
+            // Re-query after expanding
+            rows = querySelectorAll(document, SELECTORS.taskRows);
+            break;
+          }
+        }
+      }
+    }
 
     for (const row of rows) {
       const rowId = row.getAttribute("data-id") ?? row.getAttribute("data-task-id") ?? "";
@@ -252,11 +281,9 @@
           checkbox.classList.contains("checked");
 
         if (isCompleted === shouldComplete) {
-          // Already in desired state
           return { success: true, alreadyInState: true };
         }
 
-        // Click the checkbox
         checkbox.click();
         return { success: true };
       }

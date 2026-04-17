@@ -1,0 +1,166 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background: #0d1117;
+  color: #e6edf3;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.options-container {
+  max-width: 640px;
+  margin: 40px auto;
+  padding: 0 24px;
+}
+
+header {
+  margin-bottom: 32px;
+}
+
+header h1 {
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.subtitle {
+  color: #8b949e;
+  font-size: 14px;
+}
+
+.section {
+  margin-bottom: 32px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid #21262d;
+}
+
+.section h2 {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.help-text {
+  color: #8b949e;
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+
+/* Account List */
+.account-list {
+  margin-bottom: 16px;
+}
+
+.empty-state {
+  color: #8b949e;
+  padding: 16px;
+  text-align: center;
+  background: #161b22;
+  border-radius: 8px;
+  border: 1px solid #21262d;
+}
+
+.account-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  margin-bottom: 8px;
+  background: #161b22;
+  border: 1px solid #21262d;
+  border-radius: 8px;
+}
+
+.account-email {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.account-meta {
+  font-size: 12px;
+  color: #8b949e;
+  margin-top: 2px;
+}
+
+.account-sync {
+  font-size: 11px;
+  color: #484f58;
+  margin-top: 2px;
+}
+
+.account-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* Buttons */
+.btn {
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid #30363d;
+  transition: background 0.15s ease;
+}
+
+.btn-primary {
+  background: #8b5cf6;
+  color: #fff;
+  border-color: #8b5cf6;
+}
+
+.btn-primary:hover {
+  background: #7c3aed;
+}
+
+.btn-secondary {
+  background: #21262d;
+  color: #e6edf3;
+}
+
+.btn-secondary:hover {
+  background: #30363d;
+}
+
+.btn-danger {
+  background: transparent;
+  color: #f85149;
+  border-color: #f85149;
+}
+
+.btn-danger:hover {
+  background: rgba(248, 81, 73, 0.1);
+}
+
+.btn-small {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+/* Sync Status */
+.sync-status {
+  font-size: 12px;
+  color: #8b949e;
+  margin-left: 8px;
+}
+
+/* Toggle */
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.toggle-label input[type="checkbox"] {
+  accent-color: #8b5cf6;
+  width: 16px;
+  height: 16px;
+}

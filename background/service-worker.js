@@ -113,12 +113,27 @@
 
   /**
    * Reload the single tasks.google.com tab and wait for autoSync to update the cache.
+   * Expands the tab group before reloading so the page isn't hidden (visibilityState=hidden
+   * causes tasks.google.com to defer DOM rendering, breaking the scraper).
    */
   async function handleSyncTasks() {
     const tab = await ensureTasksTab();
+
+    // Expand the group so the tab renders its DOM during load
+    const groupId = tab.groupId !== -1 ? tab.groupId : null;
+    if (groupId) {
+      try { await chrome.tabGroups.update(groupId, { collapsed: false }); } catch {}
+    }
+
     await chrome.tabs.reload(tab.id);
     await waitForTabLoad(tab.id);
     await waitForCacheUpdate(6000);
+
+    // Re-collapse after sync
+    if (groupId) {
+      try { await chrome.tabGroups.update(groupId, { collapsed: true }); } catch {}
+    }
+
     return { success: true };
   }
 

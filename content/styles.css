@@ -196,7 +196,8 @@
 
 .gp-color-option input:checked + .gp-color-swatch {
   border-color: #fff;
-  transform: scale(1.15);
+  transform: scale(1.2);
+  box-shadow: 0 0 0 2px #555;
 }
 
 .gp-color-swatch:hover {

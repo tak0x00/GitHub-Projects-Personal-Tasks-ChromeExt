@@ -78,6 +78,26 @@ header h1 {
 .account-email {
   font-weight: 600;
   font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.account-status {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 1px 7px;
+  border-radius: 10px;
+}
+
+.status-active {
+  background: rgba(63, 185, 80, 0.15);
+  color: #3fb950;
+}
+
+.status-inactive {
+  background: rgba(139, 148, 158, 0.15);
+  color: #8b949e;
 }
 
 .account-meta {

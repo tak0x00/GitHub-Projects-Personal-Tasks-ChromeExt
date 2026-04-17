@@ -20,8 +20,13 @@
       return;
     }
 
+    // Check which accounts have open tabs
+    const openTabs = await chrome.tabs.query({ url: "https://tasks.google.com/*" });
+    const openTabIds = new Set(openTabs.map((t) => t.id));
+
     accountList.innerHTML = "";
     for (const account of accounts) {
+      const isActive = account.tabId != null && openTabIds.has(account.tabId);
       const card = document.createElement("div");
       card.className = "account-card";
 
@@ -33,16 +38,24 @@
         ? new Date(account.syncedAt).toLocaleString()
         : "Never";
 
+      const statusBadge = isActive
+        ? '<span class="account-status status-active">Active</span>'
+        : '<span class="account-status status-inactive">Inactive</span>';
+
+      const actionBtn = isActive
+        ? `<button class="btn btn-small btn-secondary sync-btn" data-email="${escapeAttr(account.email)}">Sync</button>`
+        : `<button class="btn btn-small btn-secondary open-tab-btn" data-email="${escapeAttr(account.email)}">Open Tab</button>`;
+
       card.innerHTML = `
         <div class="account-info">
-          <div class="account-email">${escapeHtml(account.email)}</div>
+          <div class="account-email">${escapeHtml(account.email)} ${statusBadge}</div>
           <div class="account-meta">
             ${taskCount} tasks in ${account.taskLists.length} list(s): ${escapeHtml(listNames)}
           </div>
           <div class="account-sync">Last synced: ${syncedAt}</div>
         </div>
         <div class="account-actions">
-          <button class="btn btn-small btn-secondary sync-btn" data-email="${escapeAttr(account.email)}">Sync</button>
+          ${actionBtn}
           <button class="btn btn-small btn-danger remove-btn" data-email="${escapeAttr(account.email)}">Remove</button>
         </div>
       `;
@@ -50,13 +63,30 @@
       accountList.appendChild(card);
     }
 
-    // Event handlers
+    // Remove button — convert imported tasks to local before deleting
     accountList.querySelectorAll(".remove-btn").forEach((btn) => {
       btn.addEventListener("click", async () => {
         const email = btn.dataset.email;
-        if (confirm(`Remove account "${email}" and its cached tasks?`)) {
-          const result = await chrome.storage.local.get(CACHE_KEY);
-          const cache = result[CACHE_KEY] ?? {};
+        if (confirm(`Remove account "${email}"?\n\nTasks imported from this account will be kept as local tasks (Google Tasks link will be removed).`)) {
+          // Convert imported tasks from this account to local (remove gcalSource)
+          const syncResult = await chrome.storage.sync.get("gp_personal_tasks");
+          const tasks = syncResult["gp_personal_tasks"] ?? [];
+          let changed = false;
+          const updated = tasks.map((t) => {
+            if (t.gcalSource?.email === email) {
+              changed = true;
+              const { gcalSource, ...rest } = t;
+              return { ...rest, color: rest.color || "#8b5cf6" };
+            }
+            return t;
+          });
+          if (changed) {
+            await chrome.storage.sync.set({ "gp_personal_tasks": updated });
+          }
+
+          // Remove account from cache
+          const localResult = await chrome.storage.local.get(CACHE_KEY);
+          const cache = localResult[CACHE_KEY] ?? {};
           delete cache[email];
           await chrome.storage.local.set({ [CACHE_KEY]: cache });
           render();
@@ -64,6 +94,7 @@
       });
     });
 
+    // Sync button (active accounts)
     accountList.querySelectorAll(".sync-btn").forEach((btn) => {
       btn.addEventListener("click", async () => {
         syncStatus.textContent = "Syncing...";
@@ -75,18 +106,27 @@
         render();
       });
     });
+
+    // Open Tab button (inactive accounts)
+    accountList.querySelectorAll(".open-tab-btn").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        syncStatus.textContent = "Opening tab...";
+        await chrome.runtime.sendMessage({ type: "ENSURE_TASKS_TAB" });
+        syncStatus.textContent = "Tab opened — switch to the right Google account if needed.";
+        setTimeout(() => { syncStatus.textContent = ""; }, 6000);
+        // Re-render after a moment to pick up the new tab
+        setTimeout(render, 4000);
+      });
+    });
   }
 
   // ── Add Account ──────────────────────────────────────────
 
   addAccountBtn.addEventListener("click", async () => {
-    // Open tasks.google.com via the background service worker
     const response = await chrome.runtime.sendMessage({ type: "ENSURE_TASKS_TAB" });
     if (response?.success) {
       syncStatus.textContent = "Opened tasks.google.com — tasks will sync automatically.";
       setTimeout(() => { syncStatus.textContent = ""; }, 5000);
-
-      // Wait a bit and re-render to pick up new data
       setTimeout(render, 3000);
     }
   });

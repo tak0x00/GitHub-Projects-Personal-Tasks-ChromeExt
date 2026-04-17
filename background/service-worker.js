@@ -47,27 +47,11 @@
 
   /**
    * Open a new tasks.google.com tab for adding an account.
-   * Always creates a fresh tab so the user can log into a different account.
-   * Keeps the group expanded so the new tab is visible.
+   * Skips group management so the tab is always immediately visible.
+   * (Group membership is handled lazily by ensureTasksTab during writeback.)
    */
   async function openNewTasksTab() {
-    const tab = await chrome.tabs.create({ url: TASKS_URL, active: true });
-    try {
-      const existingGroup = await findOrCreateTabGroup(tab.windowId);
-      const groupId = await chrome.tabs.group({
-        tabIds: [tab.id],
-        ...(existingGroup ? { groupId: existingGroup.id } : {}),
-      });
-      // Keep expanded so the user can see and interact with the new tab
-      await chrome.tabGroups.update(groupId, {
-        title: TAB_GROUP_TITLE,
-        color: TAB_GROUP_COLOR,
-        collapsed: false,
-      });
-    } catch (e) {
-      console.warn("[GP Tasks] Failed to manage tab group:", e);
-    }
-    return tab;
+    return chrome.tabs.create({ url: TASKS_URL, active: true });
   }
 
   /**
@@ -117,18 +101,22 @@
         return true;
 
       case "SYNC_COMPLETE":
-        // Store tabId so the options page can show Active/Inactive status
-        if (message.email && sender.tab?.id) {
-          chrome.storage.local.get("gp_gcal_cache").then((result) => {
-            const cache = result["gp_gcal_cache"] ?? {};
-            if (cache[message.email]) {
-              cache[message.email].tabId = sender.tab.id;
-              return chrome.storage.local.set({ "gp_gcal_cache": cache });
-            }
-          }).catch(() => {});
-        }
-        sendResponse({ success: true });
-        return false;
+        // Store tabId so the options page can show Active/Inactive status.
+        // Must be async (return true) so the storage write completes before SW sleeps.
+        (async () => {
+          if (message.email && sender.tab?.id) {
+            try {
+              const result = await chrome.storage.local.get("gp_gcal_cache");
+              const cache = result["gp_gcal_cache"] ?? {};
+              if (cache[message.email]) {
+                cache[message.email].tabId = sender.tab.id;
+                await chrome.storage.local.set({ "gp_gcal_cache": cache });
+              }
+            } catch {}
+          }
+          sendResponse({ success: true });
+        })();
+        return true;
 
       case "WRITEBACK_DONE":
       case "WRITEBACK_UNDONE":

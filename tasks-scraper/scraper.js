@@ -232,64 +232,64 @@
     return toggleTaskCompletion(taskId, false);
   }
 
-  function toggleTaskCompletion(taskId, shouldComplete) {
-    // Search ALL task rows on the page, including the completed section.
-    // When a task is completed, Google Tasks moves it to a collapsed "完了" section.
-    // To uncomplete it, we may need to expand that section first.
+  async function toggleTaskCompletion(taskId, shouldComplete) {
     let rows = querySelectorAll(document, SELECTORS.taskRows);
 
-    // If uncompleting and task not found in visible rows, try expanding the completed section
+    // If uncompleting, the task is in the collapsed "完了" section.
+    // We need to expand it first and wait for DOM to render.
     if (!shouldComplete) {
-      const found = rows.some((row) => {
-        const rowId = row.getAttribute("data-id") ?? row.getAttribute("data-task-id") ?? "";
-        const titleEl = querySelector(row, SELECTORS.taskTitle);
-        const stableId = generateStableId(titleEl?.textContent?.trim() ?? "");
-        return rowId === taskId || stableId === taskId;
-      });
+      const found = findTaskRow(rows, taskId);
 
       if (!found) {
-        // Try to expand the completed section by clicking its header
-        const completedHeaders = document.querySelectorAll(
-          'div[role="button"], button, [aria-expanded]'
+        // Expand completed section using aria-label (actual DOM attribute)
+        const expandBtn = document.querySelector(
+          'button[aria-label*="完了したタスクのリスト"][aria-expanded="false"]'
+        ) ?? document.querySelector(
+          'button[aria-label*="Completed tasks"][aria-expanded="false"]'
+        ) ?? document.querySelector(
+          'button[aria-label*="completed"][aria-expanded="false"]'
         );
-        for (const header of completedHeaders) {
-          const text = header.textContent ?? "";
-          if ((text.includes("完了") || text.includes("Completed")) && header.getAttribute("aria-expanded") === "false") {
-            header.click();
-            // Re-query after expanding
-            rows = querySelectorAll(document, SELECTORS.taskRows);
-            break;
-          }
+
+        if (expandBtn) {
+          expandBtn.click();
+          // Wait for the completed section to render
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          rows = querySelectorAll(document, SELECTORS.taskRows);
         }
       }
     }
 
+    const row = findTaskRow(rows, taskId);
+    if (!row) {
+      return { success: false, error: "Task not found: " + taskId };
+    }
+
+    const checkbox = querySelector(row, SELECTORS.taskCheckbox);
+    if (!checkbox) {
+      return { success: false, error: "Checkbox not found for task" };
+    }
+
+    const isCompleted =
+      checkbox.getAttribute("aria-checked") === "true" ||
+      checkbox.classList.contains("checked");
+
+    if (isCompleted === shouldComplete) {
+      return { success: true, alreadyInState: true };
+    }
+
+    checkbox.click();
+    return { success: true };
+  }
+
+  function findTaskRow(rows, taskId) {
     for (const row of rows) {
       const rowId = row.getAttribute("data-id") ?? row.getAttribute("data-task-id") ?? "";
       const titleEl = querySelector(row, SELECTORS.taskTitle);
       const title = titleEl?.textContent?.trim() ?? "";
       const stableId = generateStableId(title);
-
-      if (rowId === taskId || stableId === taskId) {
-        const checkbox = querySelector(row, SELECTORS.taskCheckbox);
-        if (!checkbox) {
-          return { success: false, error: "Checkbox not found for task" };
-        }
-
-        const isCompleted =
-          checkbox.getAttribute("aria-checked") === "true" ||
-          checkbox.classList.contains("checked");
-
-        if (isCompleted === shouldComplete) {
-          return { success: true, alreadyInState: true };
-        }
-
-        checkbox.click();
-        return { success: true };
-      }
+      if (rowId === taskId || stableId === taskId) return row;
     }
-
-    return { success: false, error: "Task not found: " + taskId };
+    return null;
   }
 
   // ── Auto Sync on Page Load ───────────────────────────────
@@ -348,15 +348,17 @@
       }
 
       case "COMPLETE_TASK": {
-        const result = completeTask(message.gcalSource?.taskId);
-        sendResponse(result);
-        return false;
+        completeTask(message.gcalSource?.taskId)
+          .then((result) => sendResponse(result))
+          .catch((e) => sendResponse({ success: false, error: e.message }));
+        return true; // async
       }
 
       case "UNCOMPLETE_TASK": {
-        const result = uncompleteTask(message.gcalSource?.taskId);
-        sendResponse(result);
-        return false;
+        uncompleteTask(message.gcalSource?.taskId)
+          .then((result) => sendResponse(result))
+          .catch((e) => sendResponse({ success: false, error: e.message }));
+        return true; // async
       }
 
       default:

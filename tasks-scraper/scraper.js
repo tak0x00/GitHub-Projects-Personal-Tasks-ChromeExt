@@ -17,49 +17,52 @@
   // They may need updating if Google changes their UI.
 
   const SELECTORS = {
-    // Task list sidebar items
-    taskListItems: [
-      'div[role="option"]',           // list selector items
-      'li[data-list-id]',             // alternative
+    // Active task list container
+    taskList: [
+      'div[role="list"][aria-label]',   // div.KSMG5.rymPhb role="list" aria-label="アクティブなタスク"
+      '.KSMG5[role="list"]',
     ],
-    // Active/visible task list name
+    // Active/visible task list name — header text above the list
     taskListTitle: [
-      'h2',                           // main heading
-      '[data-list-title]',
-      '.VfPpkd-rymPhb-fpDzbe-fmcmS',  // material design title
+      'h2',                            // "マイタスク" heading
+      '[jsname] > span',               // fallback
     ],
-    // Individual task rows
+    // Individual task rows — div.MnEwWd.CkZkVb role="listitem" data-id="..."
     taskRows: [
-      'div[role="treeitem"]',
-      'div[data-task-id]',
-      '.I5ryNb',                       // known class for task items
+      'div[role="listitem"][data-id]',  // primary: role + data-id attribute
+      'div.MnEwWd[data-id]',           // class-based fallback
+      'div.CkZkVb[role="listitem"]',   // alternative class
     ],
-    // Task title within a row
+    // Task title within a row — the visible text content
     taskTitle: [
-      '[data-task-title]',
-      '.K1Svhf',                       // known task title class
-      '[contenteditable]',
-      'span[role="link"]',
+      '[contenteditable="true"]',       // editable title field
+      '[data-placeholder]',             // field with placeholder attr
+      'span[role="link"]',              // fallback
     ],
-    // Task completion checkbox
+    // Task completion checkbox — the circle icon on the left
     taskCheckbox: [
       'div[role="checkbox"]',
-      'button[aria-label*="complete"]',
-      'button[aria-label*="Complete"]',
-      '.TZAGl',                        // known checkbox class
+      'button[role="checkbox"]',
+      '[aria-label*="完了"]',            // Japanese: "完了としてマーク"
+      '[aria-label*="complete"]',        // English
+      '[aria-label*="Complete"]',
+      '[aria-label*="Mark"]',
     ],
-    // Task details (notes, due date)
+    // Task details
     taskNotes: [
-      '[data-task-notes]',
-      '.YVu7Qd',                       // known notes class
+      '[data-placeholder*="詳細"]',      // Japanese details field
+      '[data-placeholder*="Details"]',
+      '[contenteditable][aria-label*="detail"]',
     ],
     taskDueDate: [
-      '[data-task-due]',
-      '.d9QCpf',                       // known due date class
+      '[data-date]',
+      '[aria-label*="日付"]',            // Japanese
+      '[aria-label*="Date"]',
     ],
-    // User account info
+    // User account info — Google account button in header
     userEmail: [
-      'a[aria-label*="Google Account"]',
+      'a[aria-label*="Google アカウント"]',  // Japanese
+      'a[aria-label*="Google Account"]',      // English
       '[data-email]',
       'img[data-profileimagefallback]',
     ],
@@ -144,8 +147,8 @@
       const notesEl = querySelector(row, SELECTORS.taskNotes);
       const dueDateEl = querySelector(row, SELECTORS.taskDueDate);
 
-      // Generate a stable ID from content (since we don't have real IDs)
-      const id = row.getAttribute("data-task-id") ?? generateStableId(title);
+      // Use data-id attribute (e.g. "86ri0OoHBh7YRcTh") or generate stable ID
+      const id = row.getAttribute("data-id") ?? row.getAttribute("data-task-id") ?? generateStableId(title);
 
       tasks.push({
         id,
@@ -208,7 +211,7 @@
     const rows = querySelectorAll(document, SELECTORS.taskRows);
 
     for (const row of rows) {
-      const rowId = row.getAttribute("data-task-id") ?? "";
+      const rowId = row.getAttribute("data-id") ?? row.getAttribute("data-task-id") ?? "";
       const titleEl = querySelector(row, SELECTORS.taskTitle);
       const title = titleEl?.textContent?.trim() ?? "";
       const stableId = generateStableId(title);
